@@ -109,7 +109,7 @@ if __name__ == '__main__':
         kday = korday0 + cdays
         kor[k] = rok[rok['Date'] ==  datetime.combine(kday, time.min)].to_dict()
 
-    countries = ['AUS', 'TWN', 'KOR', 'ITA', 'ESP', 'USA', 'IRN', 'DEU']
+    countries = ['AUS', 'TWN', 'KOR', 'DEU', 'USA', 'IRN', 'ESP', 'ITA']
     cdata = OrderedDict()
     for country in countries:
         c = country_groups.get_group(country).copy()
