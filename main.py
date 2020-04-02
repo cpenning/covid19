@@ -33,6 +33,8 @@ ecdc_fntemplate='COVID-19-geographic-disbtribution-worldwide-{}.xlsx'
 # Store it thither, in case we need it again
 datafile_template = '{}/data/{}'
 
+# Map from ecdc field names to display field names and display value
+#   conversion functions. Used in the map_fields function below.
 fnmap = OrderedDict({
           'countryterritoryCode': ('Country', lambda x: x),
           'popData2018': ('Pop (2018)', lambda x: int(x+0.5)),
@@ -75,8 +77,12 @@ if __name__ == '__main__':
     dateRep = str(today)
     ecdc_fn=ecdc_fntemplate.format(dateRep)
     df = pd.read_excel(get_filename(ecdc_fn))
+
+    # Clean up a little
     df = df.drop(['geoId', 'countriesAndTerritories', 'day', 'month', 'year'], axis=1)
     df = df.sort_values(by=['countryterritoryCode', 'dateRep'])
+
+    # For date computations
     df['Date'] = pd.to_datetime(df['dateRep'])
     
     # Calculate cumulative values
@@ -90,6 +96,7 @@ if __name__ == '__main__':
     # Group be country
     country_groups = df.groupby(df.countryterritoryCode)
 
+    # When was the first reported covid19 case in a country?
     first_cases = dict()
 
     for country, country_data in country_groups:
@@ -100,7 +107,9 @@ if __name__ == '__main__':
     rok = country_groups.get_group("KOR")   
 
     korday0 = first_cases['KOR']
-    
+
+    # Keep track of where in Korea's timeline a country is
+    # XXX: will break things for any country that had a case before KOR
     kor=dict()
     kordays = today - korday0
     
@@ -109,28 +118,42 @@ if __name__ == '__main__':
         kday = korday0 + cdays
         kor[k] = rok[rok['Date'] ==  datetime.combine(kday, time.min)].to_dict()
 
+    # Now we get to our comparisons.
+    # TODO: Figure out an ordering that makes sense
     countries = ['AUS', 'TWN', 'KOR', 'DEU', 'USA', 'IRN', 'ESP', 'ITA']
+
     cdata = OrderedDict()
+
+
     for country in countries:
         c = country_groups.get_group(country).copy()
+        
+        # Get the relative point in time where we are for KOR
         kdc = kor[country]['dc'][list(kor[country]['dc'])[0]]
         kdp = kor[country]['dp'][list(kor[country]['dp'])[0]]
-        print(kdc)
-        print(kdp)
+
+        # HERE! Here is the comparison code.
         c['deltaKC'] = c['cases_cumulative']*(c['dc'] - kdc)
         c['deltaKP'] = c['deaths_cumulative']*(c['dp'] - kdp)/c['dp']
+
+        # Get today's data for this country
         cdata[country] = c[c['dateRep'] == dateRep].to_dict()
+
+        # Good God, there's got to be a better way
         for k in cdata[country]:
             v = cdata[country][k]
             k0 = list(v.keys())[0]
             v = v[k0]
             cdata[country][k] = v
+
+        # Prep data for display
         cdata[country] = map_fields(cdata[country])
         cdata[country]['days'] = (today-first_cases[country]).days
 
     ctable = pd.DataFrame(cdata).T
     print(ctable)
-    # Table for d/c
+
+    # Display the table
     columns = tuple(countries)
     fig, ax = plt.subplots()
 
