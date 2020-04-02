@@ -14,7 +14,8 @@ import sys
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from datetime import date
+from collections import OrderedDict
+from datetime import date, time, datetime
 
 # Clean up your plots!
 plt.close('all')
@@ -31,6 +32,24 @@ ecdc_fntemplate='COVID-19-geographic-disbtribution-worldwide-{}.xlsx'
 
 # Store it thither, in case we need it again
 datafile_template = '{}/data/{}'
+
+fnmap = OrderedDict({
+          'countryterritoryCode': ('Country', lambda x: x),
+          'popData2018': ('Pop (2018)', lambda x: int(x+0.5)),
+          'Date' : ('Date', lambda x: x.date()),
+          'cases_cumulative': ('Cases', lambda x: int(x+0.5)),
+          'deaths_cumulative': ('Deaths', lambda x: int(x+0.5)),
+          'deltaKC': ('ΔKOR (C)', lambda x: int(x+0.5)),
+          'deltaKP': ('ΔKOR (P)', lambda x: int(x+0.5))})
+
+def map_fields(d):
+    """
+    Map the fields to readable names, and format the values
+    """
+    rval = OrderedDict()
+    for fn in fnmap:
+        rval[fnmap[fn][0]] = fnmap[fn][1](d[fn])
+    return rval
 
 def get_filename(fn):
     """
@@ -52,30 +71,75 @@ def get_filename(fn):
 
 if __name__ == '__main__':
     # Read today's news
-    dateRep = str(date.today())
-    #dateRep = '2020-04-01'
+    today = date.today()
+    dateRep = str(today)
     ecdc_fn=ecdc_fntemplate.format(dateRep)
     df = pd.read_excel(get_filename(ecdc_fn))
     df = df.drop(['geoId', 'countriesAndTerritories', 'day', 'month', 'year'], axis=1)
     df = df.sort_values(by=['countryterritoryCode', 'dateRep'])
     df['Date'] = pd.to_datetime(df['dateRep'])
+    
+    # Calculate cumulative values
     df['deaths_cumulative'] = df.groupby([df.countryterritoryCode])['deaths'].apply(lambda x: x.cumsum())
     df['cases_cumulative'] = df.groupby([df.countryterritoryCode])['cases'].apply(lambda x: x.cumsum())
+
+    # Calculate Deaths/Case and Deaths/Population
     df['dc'] = df['deaths_cumulative']/df['cases_cumulative']
     df['dp'] = df['deaths_cumulative']/(df['popData2018']/100000.0)
+
+    # Group be country
     country_groups = df.groupby(df.countryterritoryCode)
 
-    rok = country_groups.get_group("KOR")
-    kdc = rok['dc'].to_numpy() # Korea deaths/case
-    kdp = rok['dp'].to_numpy() # Korea deaths/100k of population
+    first_cases = dict()
 
-    plt.figure()
-    #countries = ['USA', 'ESP', 'KOR']
-    countries = [ 'ITA' ]
+    for country, country_data in country_groups:
+        idx = country_data.cases_cumulative.ne(0).idxmax()
+        first_cases[country] = country_data.loc[idx]['Date'].date()
+
+    # Get Korea's Numbers
+    rok = country_groups.get_group("KOR")   
+
+    korday0 = first_cases['KOR']
+    
+    kor=dict()
+    kordays = today - korday0
+    
+    for k in first_cases:
+        cdays = today-first_cases[k]
+        kday = korday0 + cdays
+        kor[k] = rok[rok['Date'] ==  datetime.combine(kday, time.min)].to_dict()
+
+    countries = ['AUS', 'TWN', 'KOR', 'ITA', 'ESP', 'USA', 'IRN', 'DEU']
+    cdata = OrderedDict()
     for country in countries:
-        c = country_groups.get_group(country).copy().set_index('Date')
-        print(c)
+        c = country_groups.get_group(country).copy()
+        kdc = kor[country]['dc'][list(kor[country]['dc'])[0]]
+        kdp = kor[country]['dp'][list(kor[country]['dp'])[0]]
+        print(kdc)
+        print(kdp)
         c['deltaKC'] = c['cases_cumulative']*(c['dc'] - kdc)
         c['deltaKP'] = c['deaths_cumulative']*(c['dp'] - kdp)/c['dp']
-        c['deltaKC'].plot()
-        c['deltaKP'].plot()
+        cdata[country] = c[c['dateRep'] == dateRep].to_dict()
+        for k in cdata[country]:
+            v = cdata[country][k]
+            k0 = list(v.keys())[0]
+            v = v[k0]
+            cdata[country][k] = v
+        cdata[country] = map_fields(cdata[country])
+        cdata[country]['days'] = (today-first_cases[country]).days
+
+    ctable = pd.DataFrame(cdata).T
+    print(ctable)
+    # Table for d/c
+    columns = tuple(countries)
+    fig, ax = plt.subplots()
+
+    # hide axes
+    fig.patch.set_visible(False)
+    ax.axis('off')
+    ax.axis('tight')
+    t = ax.table(cellText=ctable.values, colLabels=ctable.columns, loc='center')
+    t.auto_set_font_size(False)
+    t.set_fontsize(8)
+    fig.tight_layout()
+    plt.show()
