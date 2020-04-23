@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from collections import OrderedDict
-from datetime import date, time, datetime
+from datetime import date, time, datetime, timedelta
 
 # Clean up your plots!
 plt.close('all')
@@ -77,8 +77,10 @@ def main(compisocc='KOR',today=date.today()):
     dateRep = str(today)
     ecdc_fn=ecdc_fntemplate.format(dateRep)
     df = pd.read_excel(get_filename(ecdc_fn))
+    print(df.keys())
 
     # Clean up a little
+    df['dateRep'] = [str(date(year,month,day)) for day, month, year in zip(df['day'], df['month'], df['year'])]
     df = df.drop(['geoId', 'countriesAndTerritories', 'day', 'month', 'year'], axis=1)
     df = df.sort_values(by=['countryterritoryCode', 'dateRep'])
 
@@ -115,6 +117,7 @@ def main(compisocc='KOR',today=date.today()):
     compdays = today - compday0
 
     countries = ['AUS', 'TWN', 'KOR', 'DEU', 'USA', 'IRN', 'ESP', 'ITA']
+    #countries = ['USA', 'KOR', 'SWE', 'NOR']
     cdata = OrderedDict()
 
     dttoday = datetime.combine(today, time.min)
@@ -168,7 +171,8 @@ def main(compisocc='KOR',today=date.today()):
         vrow = list()
         for cell in row:
             if isinstance(cell, int):
-                vstr = locale.format_string("%d", cell, grouping=True)
+                #vstr = locale.format_string("%d", cell, grouping=True)
+                vstr = "{:,}".format(cell)
                 vrow.append(vstr)
             else:
                 vrow.append(cell)
@@ -191,4 +195,5 @@ def main(compisocc='KOR',today=date.today()):
 
 if __name__ == '__main__':
     # TODO: Maybe add command line arguments
+    #main('KOR',date.today() - timedelta(days = 1))
     main()
