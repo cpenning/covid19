@@ -117,11 +117,13 @@ def main(compisocc='KOR',today=date.today()):
     compdays = today - compday0
 
     countries = ['AUS', 'TWN', 'KOR', 'DEU', 'USA', 'IRN', 'ESP', 'ITA']
-    #countries = ['USA', 'KOR', 'SWE', 'NOR']
+    #countries = ['AUS', 'TWN', 'KOR', 'DEU', 'USA', 'IRN', 'ITA']
+    #countries = ['KOR', 'USA', 'GBR', 'IRN', 'ESP', 'ITA', 'SWE', 'NOR']
     cdata = OrderedDict()
 
     dttoday = datetime.combine(today, time.min)
     for country in countries:
+        print(country)
         cdays = today-first_cases[country]
         if compdays >= cdays:
             # Comparison country has had the infection as long or longer
@@ -152,15 +154,22 @@ def main(compisocc='KOR',today=date.today()):
         cdata[country] = c[c['Date'] == countryday[country]].to_dict()
 
         # Good God, there's got to be a better way
+        process = True
         for k in cdata[country]:
-            v = cdata[country][k]
-            k0 = list(v.keys())[0]
-            v = v[k0]
-            cdata[country][k] = v
-
-        # Prep data for display
-        cdata[country] = map_fields(cdata[country])
-        cdata[country]['days'] = (today-first_cases[country]).days
+            try:
+                v = cdata[country][k]
+                k0 = list(v.keys())[0]
+                v = v[k0]
+                cdata[country][k] = v
+            except IndexError:
+                process = False
+                break
+        if process:
+            # Prep data for display
+            cdata[country] = map_fields(cdata[country])
+            cdata[country]['days'] = (today-first_cases[country]).days
+        else:
+            del(cdata[country])
 
     ctable = pd.DataFrame(cdata).T
     print(ctable)
